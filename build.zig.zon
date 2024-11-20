@@ -1,0 +1,25 @@
+.{
+    .name = "ml",
+
+    .version = "0.0.0",
+    .dependencies = .{
+        .zgui = .{
+            .url = "git+https://github.com/zig-gamedev/zgui.git#b353ef8be9ca4ee8925651671ad7dce645aa4bf4",
+            .hash = "1220ffffdf1d0d2aca86a1ea31ba17ee48090b38cefb2a8487d2d801eb1fdd78becb",
+        },
+        .zopengl = .{
+            .url = "git+https://github.com/zig-gamedev/zopengl.git#87fbedbb3d0164abe7ffead695015c41482ee148",
+            .hash = "12203720546b5ed015b90f788d57d41ef86b09595f9450ee67ce8aca43dac00ed8a1",
+        },
+        .zglfw = .{
+            .url = "git+https://github.com/zig-gamedev/zglfw.git#8199e352d1a5f1dfa3ab08da6102342c850ca258",
+            .hash = "1220074231fcf6556b27e0ac6a3b22a19062c0c4bc3fd77c6fdcede15303af824c27",
+        },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
