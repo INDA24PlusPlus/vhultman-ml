@@ -41,7 +41,7 @@ pub fn main() !void {
     const num_samples = 60_000;
     const num_test_samples = 10_000;
     const input_size = 28 * 28;
-    const hidden_size = 100;
+    const hidden_size = 124;
     const output_size = 10;
 
     // Xavier initialization [https://365datascience.com/tutorials/machine-learning-tutorials/what-is-xavier-initialization/]
@@ -87,7 +87,7 @@ pub fn main() !void {
     std.debug.print("Initial test accuracy: {d}/{d} ({d:.2}%)\n", .{ correct, num_test_samples, percent * 100 });
 
     const initial_learning_rate = 0.08;
-    const num_epochs = 16;
+    const num_epochs = 55;
 
     // Training
     for (0..num_epochs) |epoch| {
@@ -193,7 +193,7 @@ pub fn feedforward(
     num_samples: u32,
 ) void {
     const input_size = 28 * 28;
-    const hidden_size = 100;
+    const hidden_size = 124;
     const output_size = 10;
 
     // Input to hidden layer.
@@ -251,10 +251,10 @@ fn backprop(
     batch_size: u32,
 ) void {
     const input_size = 28 * 28;
-    const hidden_size = 100;
+    const hidden_size = 124;
     const output_size = 10;
 
-    var delta_hidden: [100]f32 = undefined;
+    var delta_hidden: [hidden_size]f32 = undefined;
 
     for (0..batch_size) |sample_idx| {
         const in = input[sample_idx * input_size .. (sample_idx + 1) * input_size];

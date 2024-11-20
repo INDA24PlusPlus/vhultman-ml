@@ -109,11 +109,12 @@ pub fn main() !void {
     const test_input_data = try ml.loadInputData(gpa, "t10k-images.idx3-ubyte");
     defer gpa.free(test_input_data);
 
+    const num_neurons = 124;
     const weights = blk: {
-        const file = try std.fs.cwd().openFile("network_best.weights", .{});
+        const file = try std.fs.cwd().openFile("98.weights", .{});
         defer file.close();
 
-        const weights = try arena.alignedAlloc(f32, 32, 28 * 28 * 100 + 100 * 10);
+        const weights = try arena.alignedAlloc(f32, 32, 28 * 28 * num_neurons + num_neurons * 10);
 
         // input size.
         std.debug.assert(try file.reader().readInt(u32, .little) == 28 * 28);
@@ -121,42 +122,42 @@ pub fn main() !void {
         // layer count.
         std.debug.assert(try file.reader().readInt(u32, .little) == 2);
         // layer size
-        std.debug.assert(try file.reader().readInt(u32, .little) == 100);
+        std.debug.assert(try file.reader().readInt(u32, .little) == num_neurons);
         std.debug.assert(try file.reader().readInt(u32, .little) == 10);
 
         const ptr = @as([*]u8, @ptrCast(@alignCast(weights.ptr)))[0 .. 4 * weights.len];
-        _ = try file.reader().readAtLeast(ptr[0 .. 4 * 28 * 28 * 100], 4 * 28 * 28 * 100);
-        _ = try file.reader().readAtLeast(ptr[4 * 28 * 28 * 100 ..], 4 * 100 * 10);
+        _ = try file.reader().readAtLeast(ptr[0 .. 4 * 28 * 28 * num_neurons], 4 * 28 * 28 * num_neurons);
+        _ = try file.reader().readAtLeast(ptr[4 * 28 * 28 * num_neurons ..], 4 * num_neurons * 10);
 
         break :blk weights;
     };
 
     const biases = blk: {
-        const file = try std.fs.cwd().openFile("network_best.biases", .{});
+        const file = try std.fs.cwd().openFile("98.biases", .{});
         defer file.close();
 
-        const biases = try arena.alignedAlloc(f32, 32, 100 + 10);
+        const biases = try arena.alignedAlloc(f32, 32, num_neurons + 10);
 
         // layer count.
         std.debug.assert(try file.reader().readInt(u32, .little) == 2);
         // layer size
-        std.debug.assert(try file.reader().readInt(u32, .little) == 100);
+        std.debug.assert(try file.reader().readInt(u32, .little) == num_neurons);
         std.debug.assert(try file.reader().readInt(u32, .little) == 10);
 
         const ptr = @as([*]u8, @ptrCast(@alignCast(biases.ptr)))[0 .. biases.len * 4];
-        _ = try file.reader().readAtLeast(ptr[0..100], 100);
-        _ = try file.reader().readAtLeast(ptr[100..], 10);
+        _ = try file.reader().readAtLeast(ptr[0..num_neurons], num_neurons);
+        _ = try file.reader().readAtLeast(ptr[num_neurons..], 10);
 
         break :blk biases;
     };
 
-    const w1 = weights[0 .. 100 * 28 * 28];
-    const w2 = weights[100 * 28 * 28 ..];
-    const b1 = biases[0..100];
-    const b2 = biases[100..];
+    const w1 = weights[0 .. num_neurons * 28 * 28];
+    const w2 = weights[num_neurons * 28 * 28 ..];
+    const b1 = biases[0..num_neurons];
+    const b2 = biases[num_neurons..];
 
     const output = try arena.alloc(f32, 10 * num_samples);
-    const hidden_out = try arena.alloc(f32, 100 * num_samples);
+    const hidden_out = try arena.alloc(f32, num_neurons * num_samples);
 
     ml.feedforward(w1, w2, b1, b2, test_input_data, hidden_out, output, 10_000);
     Global.correct_test_samples = ml.countCorrectGuesses(output, test_label_file_data);
@@ -178,7 +179,7 @@ pub fn main() !void {
         const si = Global.selected_image;
         drawImageView(texture_handle, header.num_images);
         const current_image_slice = Global.image_data[28 * 28 * si .. 28 * 28 * (si + 1)];
-        const hidden_activation = hidden_out[100 * si .. 100 * (si + 1)];
+        const hidden_activation = hidden_out[num_neurons * si .. num_neurons * (si + 1)];
         const output_activaiton = output[10 * si .. 10 * (si + 1)];
 
         drawNetwork(window, current_image_slice, &.{ hidden_activation, output_activaiton }, &.{ w1, w2 }, &.{ b1, b2 });
