@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path(if (train) "src/train.zig" else "src/gui.zig"),
         .target = target,
         .optimize = optimize,
-        .link_libc = true,
+        .link_libc = !train,
     });
 
     if (!train) {

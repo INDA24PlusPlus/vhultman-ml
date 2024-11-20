@@ -76,6 +76,7 @@ pub fn main() !void {
     const batch_output = try arena.alignedAlloc(f32, 32, output_size * batch_size);
     const batch_expected = try arena.alignedAlloc(f32, 32, output_size * batch_size);
 
+    var timer = try std.time.Timer.start();
     feedforward(w1, w2, b1, b2, input_data, hidden_activations, output_activations, num_samples);
     var correct = countCorrectGuesses(output_activations, raw_label_file_data);
     var percent = @as(f32, @floatFromInt(correct)) / @as(f32, @floatFromInt(num_samples));
@@ -87,7 +88,7 @@ pub fn main() !void {
     std.debug.print("Initial test accuracy: {d}/{d} ({d:.2}%)\n", .{ correct, num_test_samples, percent * 100 });
 
     const initial_learning_rate = 0.08;
-    const num_epochs = 55;
+    const num_epochs = 10;
 
     // Training
     for (0..num_epochs) |epoch| {
@@ -134,6 +135,7 @@ pub fn main() !void {
         correct = countCorrectGuesses(test_output_activations, test_label_file_data);
         percent = @as(f32, @floatFromInt(correct)) / @as(f32, @floatFromInt(num_test_samples));
         std.debug.print("Epoch {d}: Test accuracy = {d}/{d} ({d:.2}%)\n", .{ epoch + 1, correct, num_test_samples, percent * 100 });
+        std.debug.print("Time since training started: {d}s\n", .{@as(f32, @floatFromInt(timer.read())) / std.time.ns_per_s});
     }
 
     // Save network weights
@@ -197,16 +199,29 @@ pub fn feedforward(
     const output_size = 10;
 
     // Input to hidden layer.
-    for (0..num_samples) |sample_idx| {
-        const hidden_slice = hidden[sample_idx * hidden_size .. (sample_idx + 1) * hidden_size];
-        const input_slice = input[sample_idx * input_size .. (sample_idx + 1) * input_size];
+    if (true) {
+        matMul(input, w1, hidden, num_samples, hidden_size, input_size);
 
-        for (hidden_slice, 0..) |*h, i| {
-            var sum: f32 = 0.0;
-            for (input_slice, w1[i * input_size .. (i + 1) * input_size]) |in, w| {
-                sum += in * w;
+        for (0..num_samples) |sample_idx| {
+            const hidden_slice = hidden[sample_idx * hidden_size .. (sample_idx + 1) * hidden_size];
+
+            for (hidden_slice, 0..) |*h, i| {
+                h.* = @max(0.0, h.* + b1[i]);
             }
-            h.* = @max(0.0, sum + b1[i]);
+        }
+    } else {
+        // old slow method.
+        for (0..num_samples) |sample_idx| {
+            const hidden_slice = hidden[sample_idx * hidden_size .. (sample_idx + 1) * hidden_size];
+            const input_slice = input[sample_idx * input_size .. (sample_idx + 1) * input_size];
+
+            for (hidden_slice, 0..) |*h, i| {
+                var sum: f32 = 0.0;
+                for (input_slice, w1[i * input_size .. (i + 1) * input_size]) |in, w| {
+                    sum += in * w;
+                }
+                h.* = @max(0.0, sum + b1[i]);
+            }
         }
     }
 
@@ -234,6 +249,64 @@ pub fn feedforward(
 
         for (output_slice) |*o| {
             o.* /= sum_exp;
+        }
+    }
+}
+
+fn matMul(
+    a: []const f32, // row-major format
+    b: []const f32, // column-major format
+    c: []f32, // row-major format
+    m: u32, // rows of A and C
+    n: u32, // columns of B and C
+    k: u32, // columns of A and rows of B
+) void {
+    @memset(c, 0);
+    // Optimal block size for my i7 13700k
+    const block_size = 1024 * 8;
+
+    const vector_width = 8;
+    const Vec = @Vector(vector_width, f32);
+
+    const bm = (m + block_size - 1) / block_size;
+    const bn = (n + block_size - 1) / block_size;
+    const bk = (k + block_size - 1) / block_size;
+
+    for (0..bm) |block_i| {
+        for (0..bn) |block_j| {
+            for (0..bk) |block_p| {
+                const i_start = block_i * block_size;
+                const j_start = block_j * block_size;
+                const p_start = block_p * block_size;
+
+                const i_end = @min(i_start + block_size, m);
+                const j_end = @min(j_start + block_size, n);
+                const p_end = @min(p_start + block_size, k);
+
+                for (i_start..i_end) |i| {
+                    for (j_start..j_end) |j| {
+                        const c_idx = i * n + j;
+                        var acc: Vec = @splat(0.0);
+
+                        var p = p_start;
+                        while (p + vector_width <= p_end) : (p += vector_width) {
+                            const a_simd: Vec = a[i * k + p ..][0..8].*;
+                            const b_simd: Vec = b[j * k + p ..][0..8].*;
+
+                            acc += a_simd * b_simd;
+                        }
+
+                        c[c_idx] += @reduce(.Add, acc);
+
+                        // Handle the rest with scalar ops.
+                        for (p..p_end) |scalar_p| {
+                            const a_idx = i * k + scalar_p;
+                            const b_idx = j * k + scalar_p;
+                            c[c_idx] += a[a_idx] * b[b_idx];
+                        }
+                    }
+                }
+            }
         }
     }
 }
