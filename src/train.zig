@@ -44,11 +44,12 @@ pub fn main() !void {
     const hidden_size = 124;
     const output_size = 10;
 
-    // Xavier initialization [https://365datascience.com/tutorials/machine-learning-tutorials/what-is-xavier-initialization/]
+    // Xavier initialization for the oput layer
+    // Kaiming He initialization for hidden layer.
     const w1 = try arena.alignedAlloc(f32, 32, input_size * hidden_size);
     const w2 = try arena.alignedAlloc(f32, 32, hidden_size * output_size);
-    const weight_scale1 = @sqrt(6.0 / @as(f32, @floatFromInt(input_size + hidden_size)));
-    const weight_scale2 = @sqrt(6.0 / @as(f32, @floatFromInt(hidden_size + output_size)));
+    const weight_scale1 = @sqrt(6.0 / @as(comptime_float, input_size));
+    const weight_scale2 = @sqrt(6.0 / @as(comptime_float, hidden_size + output_size));
 
     for (w1) |*w| w.* = (rand.float(f32) * 2.0 - 1.0) * weight_scale1;
     for (w2) |*w| w.* = (rand.float(f32) * 2.0 - 1.0) * weight_scale2;
@@ -88,7 +89,7 @@ pub fn main() !void {
     std.debug.print("Initial test accuracy: {d}/{d} ({d:.2}%)\n", .{ correct, num_test_samples, percent * 100 });
 
     const initial_learning_rate = 0.08;
-    const num_epochs = 10;
+    const num_epochs = 81;
 
     // Training
     for (0..num_epochs) |epoch| {
