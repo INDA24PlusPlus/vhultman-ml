@@ -75,8 +75,6 @@ pub fn main() !void {
 
     var show_demo_window = true;
 
-    const texture_handle = createTexture();
-
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -109,9 +107,9 @@ pub fn main() !void {
     const test_input_data = try ml.loadInputData(gpa, "t10k-images.idx3-ubyte");
     defer gpa.free(test_input_data);
 
-    const num_neurons = 256;
+    const num_neurons = 512;
     const weights = blk: {
-        const file = try std.fs.cwd().openFile("98-24.weights", .{});
+        const file = try std.fs.cwd().openFile("98-54.weights", .{});
         defer file.close();
 
         const weights = try arena.alignedAlloc(f32, 32, 28 * 28 * num_neurons + num_neurons * 10);
@@ -133,7 +131,7 @@ pub fn main() !void {
     };
 
     const biases = blk: {
-        const file = try std.fs.cwd().openFile("98-24.biases", .{});
+        const file = try std.fs.cwd().openFile("98-54.biases", .{});
         defer file.close();
 
         const biases = try arena.alignedAlloc(f32, 32, num_neurons + 10);
@@ -158,12 +156,16 @@ pub fn main() !void {
 
     const output = try arena.alloc(f32, 10 * num_samples);
     const hidden_out = try arena.alloc(f32, num_neurons * num_samples);
+    const dropout = try arena.alloc(f32, num_neurons);
+    @memset(dropout, 1.0);
 
-    ml.feedforward(w1, w2, b1, b2, test_input_data, hidden_out, output, 10_000);
+    ml.feedforward(w1, w2, b1, b2, test_input_data, hidden_out, output, 10_000, dropout);
     Global.correct_test_samples = ml.countCorrectGuesses(output, test_label_file_data);
 
-    ml.feedforward(w1, w2, b1, b2, input_data, hidden_out, output, num_samples);
+    ml.feedforward(w1, w2, b1, b2, input_data, hidden_out, output, num_samples, dropout);
     Global.correct_train_samples = ml.countCorrectGuesses(output, raw_label_file_data);
+
+    const texture_handle = createTexture();
 
     while (!window.shouldClose() and window.getKey(.escape) != .press) {
         glfw.pollEvents();
@@ -484,7 +486,7 @@ fn drawImageView(ident: zgui.TextureIdent, num_images: u32) void {
 
         zgui.text("Training samples accuracy: {d}/{d} ({d:.2}%)", .{
             Global.correct_train_samples,
-            60_000,
+            60_000, // hardcoded since I am lazy.
             @as(f32, @floatFromInt(Global.correct_train_samples)) / 60_000 * 100,
         });
 

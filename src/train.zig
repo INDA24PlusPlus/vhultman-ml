@@ -13,6 +13,10 @@ pub const LabelHeader = extern struct {
     num_items: u32,
 };
 
+const input_size = 28 * 28;
+const hidden_size = 512;
+const output_size = 10;
+
 pub fn main() !void {
     var gpa_state = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa_state.deinit();
@@ -40,9 +44,6 @@ pub fn main() !void {
 
     const num_samples = 60_000;
     const num_test_samples = 10_000;
-    const input_size = 28 * 28;
-    const hidden_size = 256;
-    const output_size = 10;
 
     // Xavier initialization for the oput layer
     // Kaiming He initialization for hidden layer.
@@ -58,6 +59,10 @@ pub fn main() !void {
     const b2 = try arena.alignedAlloc(f32, 32, output_size);
     @memset(b1, 0);
     @memset(b2, 0);
+
+    const dropout = try arena.alignedAlloc(f32, 32, hidden_size);
+    const dropout_prob = 0.5;
+    @memset(dropout, 1.0);
 
     // Gradients storage
     const dw1 = try arena.alignedAlloc(f32, 32, input_size * hidden_size);
@@ -78,18 +83,18 @@ pub fn main() !void {
     const batch_expected = try arena.alignedAlloc(f32, 32, output_size * batch_size);
 
     var timer = try std.time.Timer.start();
-    feedforward(w1, w2, b1, b2, input_data, hidden_activations, output_activations, num_samples);
+    feedforward(w1, w2, b1, b2, input_data, hidden_activations, output_activations, num_samples, dropout);
     var correct = countCorrectGuesses(output_activations, raw_label_file_data);
     var percent = @as(f32, @floatFromInt(correct)) / @as(f32, @floatFromInt(num_samples));
     std.debug.print("Initial training accuracy: {d}/{d} ({d:.2}%)\n", .{ correct, num_samples, percent * 100 });
 
-    feedforward(w1, w2, b1, b2, test_input_data, hidden_activations, test_output_activations, num_test_samples);
+    feedforward(w1, w2, b1, b2, test_input_data, hidden_activations, test_output_activations, num_test_samples, dropout);
     correct = countCorrectGuesses(test_output_activations, test_label_file_data);
     percent = @as(f32, @floatFromInt(correct)) / @as(f32, @floatFromInt(num_test_samples));
     std.debug.print("Initial test accuracy: {d}/{d} ({d:.2}%)\n", .{ correct, num_test_samples, percent * 100 });
 
     const initial_learning_rate = 0.08;
-    const num_epochs = 76;
+    const num_epochs = 71;
 
     // Training
     for (0..num_epochs) |epoch| {
@@ -115,6 +120,10 @@ pub fn main() !void {
             @memset(db1, 0);
             @memset(db2, 0);
 
+            for (dropout) |*m| {
+                m.* = if (rand.float(f32) < dropout_prob) 1.0 / dropout_prob else 0.0;
+            }
+
             // Select batch input
             for (0..actual_batch_size) |j| {
                 const sample_idx = indices[idx + j];
@@ -122,17 +131,18 @@ pub fn main() !void {
                 @memcpy(batch_expected[j * output_size .. (j + 1) * output_size], expected[sample_idx * output_size .. (sample_idx + 1) * output_size]);
             }
 
-            feedforward(w1, w2, b1, b2, batch_input, batch_hidden, batch_output, actual_batch_size);
-            backprop(batch_input, batch_hidden, batch_output, batch_expected, w2, dw1, dw2, db1, db2, actual_batch_size);
+            feedforward(w1, w2, b1, b2, batch_input, batch_hidden, batch_output, actual_batch_size, dropout);
+            backprop(batch_input, batch_hidden, batch_output, batch_expected, w2, dw1, dw2, db1, db2, actual_batch_size, dropout);
             applyGradients(w1, w2, b1, b2, dw1, dw2, db1, db2, learning_rate);
         }
 
-        feedforward(w1, w2, b1, b2, input_data, hidden_activations, output_activations, num_samples);
+        @memset(dropout, 1.0);
+        feedforward(w1, w2, b1, b2, input_data, hidden_activations, output_activations, num_samples, dropout);
         correct = countCorrectGuesses(output_activations, raw_label_file_data);
         percent = @as(f32, @floatFromInt(correct)) / @as(f32, @floatFromInt(num_samples));
         std.debug.print("Epoch {d}: Accuracy = {d}/{d} ({d:.2}%)\n", .{ epoch + 1, correct, num_samples, percent * 100 });
 
-        feedforward(w1, w2, b1, b2, test_input_data, hidden_activations, test_output_activations, num_test_samples);
+        feedforward(w1, w2, b1, b2, test_input_data, hidden_activations, test_output_activations, num_test_samples, dropout);
         correct = countCorrectGuesses(test_output_activations, test_label_file_data);
         percent = @as(f32, @floatFromInt(correct)) / @as(f32, @floatFromInt(num_test_samples));
         std.debug.print("Epoch {d}: Test accuracy = {d}/{d} ({d:.2}%)\n", .{ epoch + 1, correct, num_test_samples, percent * 100 });
@@ -194,35 +204,17 @@ pub fn feedforward(
     hidden: []f32,
     output: []f32,
     num_samples: u32,
+    dropout: []const f32,
 ) void {
-    const input_size = 28 * 28;
-    const hidden_size = 256;
-    const output_size = 10;
 
     // Input to hidden layer.
-    if (true) {
-        matMul(input, w1, hidden, num_samples, hidden_size, input_size);
+    matMul(input, w1, hidden, num_samples, hidden_size, input_size);
 
-        for (0..num_samples) |sample_idx| {
-            const hidden_slice = hidden[sample_idx * hidden_size .. (sample_idx + 1) * hidden_size];
+    for (0..num_samples) |sample_idx| {
+        const hidden_slice = hidden[sample_idx * hidden_size .. (sample_idx + 1) * hidden_size];
 
-            for (hidden_slice, 0..) |*h, i| {
-                h.* = @max(0.0, h.* + b1[i]);
-            }
-        }
-    } else {
-        // old slow method.
-        for (0..num_samples) |sample_idx| {
-            const hidden_slice = hidden[sample_idx * hidden_size .. (sample_idx + 1) * hidden_size];
-            const input_slice = input[sample_idx * input_size .. (sample_idx + 1) * input_size];
-
-            for (hidden_slice, 0..) |*h, i| {
-                var sum: f32 = 0.0;
-                for (input_slice, w1[i * input_size .. (i + 1) * input_size]) |in, w| {
-                    sum += in * w;
-                }
-                h.* = @max(0.0, sum + b1[i]);
-            }
+        for (hidden_slice, 0..) |*h, i| {
+            h.* = @max(0.0, h.* + b1[i]) * dropout[i];
         }
     }
 
@@ -323,11 +315,8 @@ fn backprop(
     db1: []f32,
     db2: []f32,
     batch_size: u32,
+    dropout: []const f32,
 ) void {
-    const input_size = 28 * 28;
-    const hidden_size = 256;
-    const output_size = 10;
-
     var delta_hidden: [hidden_size]f32 = undefined;
 
     for (0..batch_size) |sample_idx| {
@@ -346,12 +335,12 @@ fn backprop(
             for (0..output_size) |j| {
                 sum += delta_output[j] * w2[j * hidden_size + i];
             }
-            delta_hidden[i] = if (h[i] > 0.0) sum else 0.0;
+            delta_hidden[i] = if (h[i] > 0.0) sum * dropout[i] else 0.0;
         }
 
         for (0..output_size) |i| {
             for (0..hidden_size) |j| {
-                dw2[i * hidden_size + j] += delta_output[i] * h[j];
+                dw2[i * hidden_size + j] += delta_output[i] * h[j] * dropout[j];
             }
             db2[i] += delta_output[i];
         }
