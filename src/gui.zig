@@ -109,9 +109,9 @@ pub fn main() !void {
     const test_input_data = try ml.loadInputData(gpa, "t10k-images.idx3-ubyte");
     defer gpa.free(test_input_data);
 
-    const num_neurons = 124;
+    const num_neurons = 256;
     const weights = blk: {
-        const file = try std.fs.cwd().openFile("98-06.weights", .{});
+        const file = try std.fs.cwd().openFile("98-24.weights", .{});
         defer file.close();
 
         const weights = try arena.alignedAlloc(f32, 32, 28 * 28 * num_neurons + num_neurons * 10);
@@ -133,7 +133,7 @@ pub fn main() !void {
     };
 
     const biases = blk: {
-        const file = try std.fs.cwd().openFile("98-06.biases", .{});
+        const file = try std.fs.cwd().openFile("98-24.biases", .{});
         defer file.close();
 
         const biases = try arena.alignedAlloc(f32, 32, num_neurons + 10);
