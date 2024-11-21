@@ -1,8 +1,14 @@
-# Building GUI
+# Build options
+Build in release mode if you value your time
+## Building GUI
+```
 zig build -Doptimize=ReleaseFast
+```
 
-# Building training application
-zig build -Doptimize=ReleaseFast
+## Building training application
+```
+zig build -Doptimize=ReleaseFast -Dtrain=true
+```
 
 # Architecture
 ## Results
